@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "dlog.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{ include "dlog.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{ include "dlog.selectorLabels" . | nindent 6 }}
+  serviceName: {{ include "dlog.fullname" . }}
+  replicas: {{ .Values.replicas }}
+  template:
+    metadata:
+      name: {{ include "dlog.fullname" . }}
+      labels: {{ include "dlog.labels" . | nindent 8 }}
+    spec:
+      initContainers:
+      - name: {{ include "dlog.fullname" . }}-config-init
+        image: busybox
+        imagePullPolicy: IfNotPresent
+        command:          
+          - /bin/sh
+          - -c
+          - |-
+            ID=$(echo $HOSTNAME | rev | cut -d- -f1 | rev)
+            cat > /var/run/dlog/config.yaml <<-EOF
+            data-dir: /var/run/dlog/data
+            rpc-port: {{.Values.rpcPort}}
+            bind-addr: "$HOSTNAME.dlog.{{.Release.Namespace}}.svc.cluster.local:{{.Values.serfPort}}"
+            $([ $ID != 0 ] && echo 'start-join-addrs: "dlog-0.dlog.{{.Release.Namespace}}.svc.cluster.local:{{.Values.serfPort}}"' )
+            bootstrap: $([ $ID = 0 ] && echo true || echo false )            
+            EOF
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/run/dlog
+      containers:
+      - name: {{ include "dlog.fullname" . }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        ports:
+        - containerPort: {{ .Values.rpcPort }}
+          name: rpc
+        - containerPort: {{ .Values.serfPort }}
+          name: serf
+        args:
+          - --config-file=/var/run/dlog/config.yaml
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - |-
+              /bin/grpc-health-probe -addr=$HOSTNAME.dlog.{{.Release.Namespace}}.svc.cluster.local:{{.Values.rpcPort}}
+          initialDelaySeconds: 10
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - |-
+              /bin/grpc-health-probe -addr=$HOSTNAME.dlog.{{.Release.Namespace}}.svc.cluster.local:{{.Values.rpcPort}}
+          initialDelaySeconds: 10
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/run/dlog
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.storage }}
