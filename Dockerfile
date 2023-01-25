@@ -1,4 +1,4 @@
-FROM bxffour/dlog-build:latest AS build
+FROM golang:1.18.2-alpine3.15 AS build
 WORKDIR /go/src/dlog
 COPY . .
 
