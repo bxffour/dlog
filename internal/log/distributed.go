@@ -18,9 +18,10 @@ import (
 )
 
 type DistributedLog struct {
-	config Config
-	log    *Log
-	raft   *raft.Raft
+	config  Config
+	log     *Log
+	raftlog *logStore
+	raft    *raft.Raft
 }
 
 func NewDistributedLog(dataDir string, config Config) (*DistributedLog, error) {
@@ -51,34 +52,32 @@ func (l *DistributedLog) setupLog(dataDir string) error {
 }
 
 func (l *DistributedLog) setupRaft(dataDir string) error {
+	var err error
+
 	fsm := &fsm{log: l.log}
 
 	logDir := filepath.Join(dataDir, "raft", "log")
 	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return err
+		return fmt.Errorf("filepath.Join: %w", err)
 	}
 
 	logConfig := l.config
 	logConfig.Segment.InitialOffset = 1
-	logStore, err := newLogStore(logDir, logConfig)
+	l.raftlog, err = newLogStore(logDir, logConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf("newLogStore: %w", err)
 	}
 
 	stableStore, err := raftboltdb.NewBoltStore(filepath.Join(dataDir, "raft", "stable"))
 	if err != nil {
-		return err
+		return fmt.Errorf("NewBoltStore: %w", err)
 	}
 
 	retain := 1
 
 	snapshotStore, err := raft.NewFileSnapshotStore(filepath.Join(dataDir, "raft"), retain, os.Stderr)
 	if err != nil {
-		return err
-	}
-
-	if err != nil {
-		return err
+		return fmt.Errorf("NewFileSnapshotStore: %w", err)
 	}
 
 	maxPool := 5
@@ -106,19 +105,19 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 	l.raft, err = raft.NewRaft(
 		config,
 		fsm,
-		logStore,
+		l.raftlog,
 		stableStore,
 		snapshotStore,
 		transport,
 	)
 
 	if err != nil {
-		return err
+		return fmt.Errorf("raft.NewRaft: %w", err)
 	}
 
-	hasState, err := raft.HasExistingState(logStore, stableStore, snapshotStore)
+	hasState, err := raft.HasExistingState(l.raftlog, stableStore, snapshotStore)
 	if err != nil {
-		return err
+		return fmt.Errorf("raft.HasExistingState: %w", err)
 	}
 
 	if l.config.Raft.Bootstrap && !hasState {
@@ -129,8 +128,12 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 			}},
 		}
 		err = l.raft.BootstrapCluster(config).Error()
+		if err != nil {
+			return fmt.Errorf("raft.BootstrapCluster: %w", err)
+		}
 	}
-	return err
+
+	return nil
 }
 
 func (l *DistributedLog) Append(record *api.Record) (uint64, error) {
@@ -443,7 +446,7 @@ func (l *DistributedLog) WaitForLeader(timeout time.Duration) error {
 	for {
 		select {
 		case <-timeoutc:
-			return errors.New("timed out")
+			return fmt.Errorf("timed out")
 		case <-ticker.C:
 			if l := l.raft.Leader(); l != "" {
 				return nil
@@ -455,6 +458,10 @@ func (l *DistributedLog) WaitForLeader(timeout time.Duration) error {
 func (l *DistributedLog) Close() error {
 	f := l.raft.Shutdown()
 	if err := f.Error(); err != nil {
+		return err
+	}
+
+	if err := l.raftlog.Log.Close(); err != nil {
 		return err
 	}
 

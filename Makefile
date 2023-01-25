@@ -56,7 +56,20 @@ $(CONFIG_PATH)/policy.csv:
 test: $(CONFIG_PATH)/policy.csv $(CONFIG_PATH)/model.conf
 		gotest -race -v ./...
 
+.PHONY: deploy
+deploy:
+	helm install dlog deploy/dlog
+
+.PHONY: uninstall
+uninstall:
+	helm delete dlog
+	kubectl delete pvc datadir-dlog-0
+	kubectl delete pvc datadir-dlog-1
+	kubectl delete pvc datadir-dlog-2
+
+
 TAG ?= 0.0.1
+GHCR ?= ghcr.io/bxffour
 
 build-docker:
-	docker build -t sxntana/dlog:$(TAG) .
+	docker build -t $(GHCR)/dlog:$(TAG) .

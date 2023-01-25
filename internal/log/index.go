@@ -81,7 +81,7 @@ func (i *index) Read(in int64) (out uint32, pos uint64, err error) {
 }
 
 func (i *index) Write(off uint32, pos uint64) error {
-	if uint64(len(i.mmap)) < i.size+entWidth {
+	if i.isMaxed() {
 		return io.EOF
 	}
 
@@ -93,4 +93,8 @@ func (i *index) Write(off uint32, pos uint64) error {
 
 func (i *index) Name() string {
 	return i.file.Name()
+}
+
+func (i *index) isMaxed() bool {
+	return uint64(len(i.mmap)) < i.size+entWidth
 }

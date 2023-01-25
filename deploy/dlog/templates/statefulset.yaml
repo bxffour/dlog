@@ -27,8 +27,8 @@ spec:
             data-dir: /var/run/dlog/data
             rpc-port: {{.Values.rpcPort}}
             bind-addr: "$HOSTNAME.dlog.{{.Release.Namespace}}.svc.cluster.local:{{.Values.serfPort}}"
-            $([ $ID != 0 ] && echo 'start-join-addrs: "dlog-0.dlog.{{.Release.Namespace}}.svc.cluster.local:{{.Values.serfPort}}"' )
             bootstrap: $([ $ID = 0 ] && echo true || echo false )            
+            $([ $ID != 0 ] && echo 'start-join-addrs: "dlog-0.dlog.{{.Release.Namespace}}.svc.cluster.local:{{.Values.serfPort}}"' )
             EOF
         volumeMounts:
         - name: datadir

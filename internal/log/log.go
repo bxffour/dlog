@@ -1,6 +1,7 @@
 package log
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -41,7 +42,7 @@ func NewLog(dir string, c Config) (*Log, error) {
 func (l *Log) setup() error {
 	files, err := os.ReadDir(l.Dir)
 	if err != nil {
-		return err
+		return fmt.Errorf("ReadDir: %w", err)
 	}
 
 	var baseOffsets []uint64
@@ -61,7 +62,7 @@ func (l *Log) setup() error {
 
 	for i := 0; i < len(baseOffsets); i++ {
 		if err := l.newSegment(baseOffsets[i]); err != nil {
-			return err
+			return fmt.Errorf("l.newSegment: %w", err)
 		}
 
 		i++
@@ -69,7 +70,7 @@ func (l *Log) setup() error {
 
 	if l.segments == nil {
 		if err = l.newSegment(l.Config.Segment.InitialOffset); err != nil {
-			return err
+			return fmt.Errorf("l.newSegment2: %w", err)
 		}
 	}
 
@@ -77,16 +78,24 @@ func (l *Log) setup() error {
 }
 
 func (l *Log) Append(record *api.Record) (uint64, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	off, err := l.activeSegment.Append(record)
+	highesOffset, err := l.HighestOffset()
 	if err != nil {
 		return 0, err
 	}
 
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	if l.activeSegment.IsMaxed() {
-		err = l.newSegment(off + 1)
+		err = l.newSegment(highesOffset + 1)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	off, err := l.activeSegment.Append(record)
+	if err != nil {
+		return 0, err
 	}
 
 	return off, err

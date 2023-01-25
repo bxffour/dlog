@@ -1,6 +1,6 @@
 # Default values for proglog.
 image:
-  repository: sxntana/dlog
+  repository: ghcr.io/bxffour/dlog
   tag: 0.0.1
   pullPolicy: IfNotPresent
 serfPort: 8401

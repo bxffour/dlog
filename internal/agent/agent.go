@@ -81,12 +81,13 @@ func New(config Config) (*Agent, error) {
 }
 
 func (a *Agent) setupMux() error {
-	addr, err := net.ResolveTCPAddr("tcp", a.Config.BindAddr)
-	if err != nil {
-		return fmt.Errorf("setupMux: net.ResolveTCPAddr: %w", err)
-	}
+	// addr, err := net.ResolveTCPAddr("tcp", a.Config.BindAddr)
+	// if err != nil {
+	// 	return fmt.Errorf("setupMux: net.ResolveTCPAddr: %w", err)
+	// }
 
-	rpcAddr := fmt.Sprintf("%s:%d", addr.IP.String(), a.Config.RPCPort)
+	// rpcAddr := fmt.Sprintf("%s:%d", addr.IP.String(), a.Config.RPCPort)
+	rpcAddr := fmt.Sprintf(":%d", a.Config.RPCPort)
 	ln, err := net.Listen("tcp", rpcAddr)
 	if err != nil {
 		return fmt.Errorf("setupMux: net.Listen: %w", err)
@@ -138,11 +139,14 @@ func (a *Agent) setupLog() error {
 		return fmt.Errorf("setupLog: NewDistributedLog: %w", err)
 	}
 
-	if !a.Config.Bootstrap {
+	if a.Config.Bootstrap {
 		err = a.log.WaitForLeader(10 * time.Second)
+		if err != nil {
+			return fmt.Errorf("setupLog: Bootstrap: %w", err)
+		}
 	}
 
-	return fmt.Errorf("setupLog: %w", err)
+	return nil
 }
 
 func (a *Agent) setupServer() error {
@@ -172,7 +176,7 @@ func (a *Agent) setupServer() error {
 		}
 	}()
 
-	return fmt.Errorf("setupServer: %w", err)
+	return err
 }
 
 func (a *Agent) setupMembership() error {
@@ -190,7 +194,7 @@ func (a *Agent) setupMembership() error {
 		StartJoinAddrs: a.Config.StartJoinAddrs,
 	})
 
-	return fmt.Errorf("setupMembership: %w", err)
+	return err
 }
 
 func (a *Agent) Shutdown() error {
